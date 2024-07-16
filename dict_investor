@@ -1,0 +1,162 @@
+from numpy import array, column_stack
+from numpy.linalg import solve, matrix_rank, LinAlgError
+import matplotlib.pyplot as plt
+
+
+class Investor:
+    def __init__(self, r: float = 0, data: dict[str, list[float]] = None):
+        self.__correct(data, r)
+        self.r = r
+        self.data = data
+
+    def __correct(self, data: dict[str, list[float]], r: float):
+        if data is None:
+            data = {}
+        if not isinstance(r, float) and not isinstance(r, int):
+            raise ValueError("r должно быть числом")
+        if not isinstance(data, dict):
+            raise ValueError("Необходимо подавать словарь в формате {'str': []}")
+        for i in list(data.keys()):
+            if not isinstance(i, str):
+                raise ValueError("Ключи должны быть строками")
+            if not isinstance(data[i], list):
+                raise ValueError("Элементы словаря должны быть списками ")
+            for j in data[i]:
+                if not isinstance(j, float) and not isinstance(j, int):
+                    raise ValueError("Элементы списка - целые и дробные числа")
+
+    def get_data(self):
+        while True:
+            try:
+                num = input("Напишите единицу, если хотите использовать готовые данные или двойку, если хотите ввести "
+                            "данные собственноручно: ")
+                if int(num) == 1:
+                    self.r = 0.2
+                    self.data = {"Лукоил": [0.71, 2.40, -1.41, -2.80, -1.52, 1.24, 0.64, -2.31, -1.55, 0.27,
+                                            -0.36, 0.17, -0.25, 1.81, 0.78, -0.22, -0.22, -0.32, -0.01, -0.11],
+                                 "РОС АГРО ПЛС": [0.36, 4.42, 0.95, -0.80, -2.29, 2.83, 1.59, -3.42, -2.74, -1.07,
+                                                  3.26, -1.08, -2.35, -1.54, -1.03, 1.25, -3.00, -2.00, -1.00, -1.55],
+                                 "Яндекс": [-0.31, 3.30, 1.19, -0.89, -0.45, 0.31, -1.12, -2.51, -0.41, -0.65,
+                                            3.11, -2.14, -1.76, -2.07, 0.14, -3.00, 1.88, 1.17, 1.07, -1.06]}
+                    break
+                elif int(num) == 2:
+                    self.r = float(input("Введите ожидаемую выручку: "))
+                    self.data = self.create_data()
+                    break
+            except ValueError:
+                print("Введите корректные данные!")
+                continue
+
+    def create_data(self):
+        while True:
+            try:
+                self.data = {}
+                companies = input("Введите количество компаний: ")
+                if int(companies) <= 0:
+                    raise ValueError
+                for i in range(int(companies)):
+                    name_company = input("Введите название компании: ")
+                    stock_company = list(map(float, input("Введите изменение акций через пробел: ").split()))
+                    self.data[name_company] = stock_company
+                return self.data
+            except ValueError:
+                print("Вводите данные корректно!")
+                continue
+
+    def cov(self, comp1: str, comp2: str):
+        con1 = self.data[comp1]
+        con2 = self.data[comp2]
+        am1 = self.average(comp1)
+        am2 = self.average(comp2)
+        summa, count = 0, 0
+        for i in range(len(con1)):
+            summa += (con1[i] - am1) * (con2[i] - am2)
+            count += 1
+        return round(summa / count, 3)
+
+    def create_matrix(self):
+        covs, rs = [], []
+        for company1 in self.data:
+            temp = []
+            for company2 in self.data:
+                temp.append(self.cov(company1, company2) * 2)
+
+            ri = self.average(company1)
+            rs.append(ri)
+            temp += [ri, 1]
+            covs.append(temp)
+
+        covs.append(rs + [0, 0])
+        covs.append([1 for _ in range(len(self.data))])
+        covs[-1] += [0, 0]
+        return array(covs)
+
+    def count_shares(self):
+        try:
+            matrix = self.create_matrix()
+            extend = [0 for _ in range(len(self.data))]
+            extend += [self.r, 1]
+
+            matrix = array(matrix)
+            extend = array(extend)
+
+            return solve(matrix, extend)[:-2]
+        except LinAlgError:
+            rang_matrix1 = matrix_rank(matrix)
+            rang_matrix2 = matrix_rank(column_stack((matrix, extend)))
+            if rang_matrix1 == rang_matrix2 and rang_matrix1 < matrix.shape[1]:
+                return "Система имеет бесконечно много решений"
+            else:
+                return "Система не имеет решения"
+
+    def average(self, comp: str):
+        num = self.data[comp]
+        return round(sum(num) / len(num), 3)
+
+    def last(self):
+        c_s = list(map(float, self.count_shares()))
+        key_list = list(self.data.keys())
+        print(key_list)
+        for i in range(len(c_s)):
+            print(f'Доля акций компании {key_list[i]}, которые надо купить, составляет {c_s[i]}  ')
+        x = input("Хотите получить ображение данных в виде круговой диаграммы? Напишите 1\n"
+                  "Для завершения программы напишите 2: ")
+        if x == "1":
+            self.create_dig(key_list, c_s)
+        elif x == "2":
+            return "Программа завершена"
+        else:
+            raise ValueError("Введите то, что вас попросили!")
+        return "Программа завершена"
+
+    @staticmethod
+    def create_dig(labels: list, value: list):
+        labels = labels
+        sizes = value
+        for i in sizes:
+            if i <= 0:
+                raise ValueError("невозможно построить график с такими данными")
+        plt.pie(sizes, labels=labels, autopct='%1.1f%%')
+        plt.axis('equal')
+        plt.title('Доля каждой компании в портфеле')
+        plt.show()
+
+
+if __name__ == "__main__":
+    # w = Investor()
+    # w.get_data()
+    # print(w.last())
+    s = Investor(0.2, {'A':
+                           [0.6, -0.03, 7.18, -1.16, -3.06, -3.15, -0.35, 1.96, -3.91, -2.35, -0.68, 1.14, -0.46, 0.3,
+                            2.58, -0.72,
+                            -0.66,
+                            -0.57, 2.47, -0.91],
+                       'B': [0.6, -0.03, 7.18, -1.16, -3.06, -3.15, -0.35, 1.96, -3.91, -2.35, -0.68, 1.14, -0.46, 0.3,
+                             2.58, -0.72,
+                             -0.66,
+                             -0.57, 2.47, -0.91],
+                       "C": [-0.05, -0.18, 2.4, -1.41, -2.8, -1.52, 1.24, 0.64, -2.31, -1.55, 0.27, -0.36, 0.17, -0.25,
+                             1.81, 0.78,
+                             -0.22, -0.22, -0.32, -0.01]})
+
+    print(s.last())
